@@ -16,12 +16,12 @@ CHIP PC {
     OUT out[16];
 
     PARTS:
-    Dmux(a=previousOut, b[0..15]=false, sel=reset, out=resetedOut);
+    DMux(a=previousOut, b[0..15]=false, sel=reset, out=resetedOut);
     
-    Dmux(a=resetedOut, b=in, sel=load, out=loadedOut);
+    DMux(a=resetedOut, b=in, sel=load, out=loadedOut);
     
     Inc16(in=previousOut, out=outPlus1);
-    Dmux(a=loadedOut, b=outPlus1, sel=inc, out=nextOut);
+    DMux(a=loadedOut, b=outPlus1, sel=inc, out=nextOut);
 
     DFF(in=nextOut, out=out, out=previousOut);
 }
