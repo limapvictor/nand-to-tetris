@@ -12,16 +12,16 @@
  */
 
 CHIP PC {
-    IN in[16],load,inc,reset;
+    IN in[16], load, inc,reset;
     OUT out[16];
 
     PARTS:
-    DMux(a=previousOut, b[0..15]=false, sel=reset, out=resetedOut);
-    
-    DMux(a=resetedOut, b=in, sel=load, out=loadedOut);
-    
     Inc16(in=previousOut, out=outPlus1);
-    DMux(a=loadedOut, b=outPlus1, sel=inc, out=nextOut);
+    Mux16(a=previousOut, b=outPlus1, sel=inc, out=incrementedOut);
+    
+    Mux16(a=incrementedOut, b=in, sel=load, out=loadedOut);
+    
+    Mux16(a=loadedOut, b[0..15]=false, sel=reset, out=nextOut);
 
-    DFF(in=nextOut, out=out, out=previousOut);
+    Register(in=nextOut, load=true, out=out, out=previousOut);
 }
