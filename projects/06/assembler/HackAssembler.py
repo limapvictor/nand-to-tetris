@@ -1,5 +1,29 @@
 import sys
 
+class SymbolTable:
+    def __init__(self):
+        self.table = {
+            'SCREEN': 16384,
+            'KBD': 24576,
+            'SP': 0,
+            'LCL': 1,
+            'ARG': 2,
+            'THIS': 3,
+            'THAT': 4,
+        }
+        for i in range(16):
+            self.table[f'R{i}'] = i
+        self.first_free_address = 16
+
+    def get_or_insert_symbol(self, symbol):
+        if symbol not in self.table:
+           self.table[symbol] = self.first_free_address
+           self.first_free_address += 1
+        return self.table[symbol]
+   
+    def insert_label(self, label, address):
+        self.table[label] = address
+
 class Translator:
     
     COMP_TRANSLATE_TABLE = {
@@ -37,7 +61,7 @@ class Translator:
     C_INSTRUCTION_BEGIN = '111'
 
     def __init__(self):
-        pass
+        self.symbol_table = SymbolTable()
 
     def _is_symbol_address(self, address):
         try:
@@ -47,16 +71,15 @@ class Translator:
             return True
 
     def translate_A_instruction(self, address):
+        if (self._is_symbol_address(address)):
+            address = self.symbol_table.get_or_insert_symbol(address)
         return format(int(address), '016b')
 
     def _translate_dest_bits(self, dest):
         dest_bits = ['0', '0', '0']
-        if 'M' in dest:
-            dest_bits[2] = '1'
-        if 'D' in dest:
-            dest_bits[1] = '1'
-        if 'A' in dest:
-            dest_bits[0] = '1'
+        for index, register in enumerate(['A', 'D', 'M']):
+            if register in dest:
+                dest_bits[index] = '1'
         return ''.join(dest_bits)
 
     def translate_C_instruction(self, computation_register, comp, dest, jmp):
@@ -66,6 +89,9 @@ class Translator:
         translated_jmp = self.JUMP_TRANSLATE_TABLE[jmp]
         return (self.C_INSTRUCTION_BEGIN + translated_computation_register + translated_comp
             + translated_dest + translated_jmp)
+    
+    def insert_label(self, label, address):
+        self.symbol_table.insert_label(label, address)
 
 class Parser:
     
@@ -93,33 +119,29 @@ class Parser:
         return self.translator.translate_A_instruction(instruction[1:])
 
     def _parse_C_instruction(self, instruction):
-        parsed_instruction = instruction.split('=')
-        if len(parsed_instruction) > 1 :
-            dest = parsed_instruction[0]
-            comp = parsed_instruction[1]
-        else:
-            dest = ''
-            comp = parsed_instruction[0]
-        parsed_instruction = comp.split(';')
-        if len(parsed_instruction) > 1 :
-            comp = parsed_instruction[0]
-            jmp = parsed_instruction[1]
-        else:
-            jmp = ''
-            comp = parsed_instruction[0]
+        attrib_index = instruction.find('=')
+        comma_index = instruction.find(';')
+        dest = instruction[:attrib_index] if attrib_index != -1 else ''
+        comp = instruction[attrib_index + 1 : comma_index] if comma_index != -1 else instruction[attrib_index + 1 :]
+        jmp = instruction[comma_index + 1:] if comma_index != -1 else ''
         computation_register = 'M' if comp.find('M') != -1 else 'A'
         comp = comp.replace('A', 'Y').replace('M', 'Y')
         return self.translator.translate_C_instruction(computation_register, comp, dest, jmp)
 
     def _parse_Label_instruction(self, instruction):
-        return instruction
+        label = instruction.replace('(', '').replace(')', '')
+        label_address = len(self.assembly_instructions)
+        self.translator.insert_label(label, label_address)
     
     def first_pass(self):
         for line in self.source:
             instruction = self._remove_spaces_and_comments(line)
             if instruction != '':
                 instruction_type = self._get_instruction_type(instruction)
-                self.assembly_instructions.append([instruction, instruction_type])
+                if instruction_type == self.LABEL_INSTRUCTION:
+                    self._parse_Label_instruction(instruction)
+                else:
+                    self.assembly_instructions.append([instruction, instruction_type])
         self.source.close()
 
     def second_pass(self):
