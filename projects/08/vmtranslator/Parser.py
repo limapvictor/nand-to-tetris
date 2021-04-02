@@ -46,8 +46,9 @@ class Parser:
     def arg1(self):
         if self.command_type() == C_ARITHMETIC:
             return self._current_command[0]
-        else:
+        if self.command_type() != C_RETURN:
             return self._current_command[1]
+        return None
     
     def arg2(self):
         if len(self._current_command) >= 3:
