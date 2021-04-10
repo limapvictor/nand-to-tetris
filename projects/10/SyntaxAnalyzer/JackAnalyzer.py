@@ -1,7 +1,7 @@
 import sys
 import os.path
 
-import JackTokenizer
+from CompilationEngine import CompilationEngine
 
 class JackAnalyzer:
     def __init__(self, path):
@@ -12,8 +12,9 @@ class JackAnalyzer:
 
     def analyze(self):
         for file in self._files:
-            tokenizer = JackTokenizer.JackTokenizer(file)
-            tokenizer._tokenize()
+            engine = CompilationEngine(file)
+            engine.constructParseTree()
+
 def main():
     path = sys.argv[1]
     analyzer = JackAnalyzer(path)

@@ -7,6 +7,13 @@ class JackTokenizer:
         self._jackCode = ''
         self._readJackFile(filepath)
         self._tokens = []
+        self._tokenize()
+
+    def hasMoreTokens(self):
+        return len(self._tokens) > 0
+    
+    def advance(self):
+        return self._tokens.pop(0)
 
     def _tokenize(self):
         self._removeCommentsFromJackCode()
