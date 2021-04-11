@@ -3,6 +3,12 @@ import re
 from Constants import *
 
 class JackTokenizer:
+    KEYWORD_REGEX = '|'.join(KEYWORDS)
+    SYMBOL_REGEX = '[' + re.escape(''.join(SYMBOLS)) + ']'
+    INT_REGEX = r'[0-9]{1,5}'
+    STRING_REGEX = r'"[^"\n]*"'
+    IDENTIFIER_REGEX = r'[\w\-]+'
+    
     def __init__(self, filepath):
         self._jackCode = ''
         self._readJackFile(filepath)
@@ -35,30 +41,27 @@ class JackTokenizer:
     def _removeCommentsFromJackCode(self):
         lineCommentRegex = '\/\/(.*?)\n'
         multiLineCommentRegex = '\/\*(.*?)\*\/'
-        apiCommentRegex = '\/\*\*(.*?)\*\/'
+        apiCommentRegex = '\/\*\*((.|\n)*?)\*\/'
         comments = f'{lineCommentRegex}|{multiLineCommentRegex}|{apiCommentRegex}'
 
         self._jackCode = re.sub(comments, '', self._jackCode)
 
     def _splitJackCodeOnTokenValues(self):
-        splitters = SYMBOLS + [' ']
-        splitters = '|\\'.join(splitters)
-
-        self._jackCode = re.split(f'([{splitters}])', self._jackCode)
-        self._jackCode = [tokenValue for tokenValue in self._jackCode if tokenValue != ' ' and tokenValue != '']
+        tokenFinder = re.compile(f'{self.KEYWORD_REGEX}|{self.SYMBOL_REGEX}|{self.INT_REGEX}|{self.STRING_REGEX}|{self.IDENTIFIER_REGEX}')
+        self._jackCode = tokenFinder.findall(self._jackCode)
 
     def _getTokenTypeByValue(self, value):
-        if value in KEYWORDS:
+        if re.fullmatch(self.KEYWORD_REGEX, value):
             return T_KEYWORD
 
-        if value in SYMBOLS:
+        if re.fullmatch(self.SYMBOL_REGEX, value):
             return T_SYMBOL
 
-        if re.fullmatch(r'[0-9]{1,5}', value):
+        if re.fullmatch(self.INT_REGEX, value):
             return T_INTEGER_CONSTANT
 
-        if re.fullmatch(r'^\"[^\"\n]*\"$', value):
+        if re.fullmatch(self.STRING_REGEX, value):
             return T_STRING_CONSTANT
 
-        if re.fullmatch(r'^[a-zA-Z\_][a-zA-Z0-9\_]*', value):
+        if re.fullmatch(self.IDENTIFIER_REGEX, value):
             return T_IDENTIFIER

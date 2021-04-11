@@ -3,7 +3,7 @@ from JackTokenizer import JackTokenizer
 
 class CompilationEngine:
     def __init__(self, filepath):
-        file = filepath.replace('.jack', '1.xml')
+        file = filepath.replace('.jack', '.xml')
         self._outputFile = open(file, 'w')
         self._tokenizer = JackTokenizer(filepath) 
         self._openedNonTerminalElements = []
@@ -131,6 +131,14 @@ class CompilationEngine:
         self._eatObligatory([T_IDENTIFIER])
         self._writeTerminalElement()
 
+        if self._eatExpected([T_SYMBOL], ['[']):
+            self._writeTerminalElement()
+
+            self._compileExpression()
+
+            self._eatObligatory([T_SYMBOL], [']'])
+            self._writeTerminalElement()   
+
         self._eatObligatory([T_SYMBOL], ['='])
         self._writeTerminalElement()
 
@@ -157,54 +165,83 @@ class CompilationEngine:
         self._compileConditionalStatementBody()
 
     def _compileDoStatement(self):
-        self._compileSubRoutineCall()
+        self._compileSubroutineCall(calledFromDoStatement=True)
 
         self._eatObligatory([T_SYMBOL], [';'])
         self._writeTerminalElement() 
     
     def _compileReturnStatement(self):
-        if self._eatExpected([T_IDENTIFIER, T_KEYWORD], [K_TRUE, K_FALSE, K_THIS, K_NULL]):
+        if self._eatExpected([T_SYMBOL], [';']):
+            self._writeTerminalElement()
+        else:
             self._compileExpression()
 
-        self._eatObligatory([T_SYMBOL], [';'])
-        self._writeTerminalElement()
+            self._eatObligatory([T_SYMBOL], [';'])
+            self._writeTerminalElement()
 
     def _compileExpression(self):
         self._openNonTerminalElement(NON_TERMINAL_EXPRESSION, eraseToken=False)
-        self._openNonTerminalElement(NON_TERMINAL_TERM, eraseToken=False)
-        self._eatExpected([T_IDENTIFIER, T_KEYWORD], [K_TRUE, K_FALSE, K_THIS, K_NULL])
-        self._writeTerminalElement()
-        self._closeNonTerminalElement(NON_TERMINAL_TERM)
+
+        self._compileTerm()
+        
+        if self._eatExpected([T_SYMBOL], ['+', '-', '*', '/', '&', '|', '<', '>', '=']):
+            self._writeTerminalElement()
+
+            self._compileTerm()
+
         self._closeNonTerminalElement(NON_TERMINAL_EXPRESSION)
 
-    def _compileSubRoutineCall(self):
-        self._eatExpected([T_IDENTIFIER])
-        self._writeTerminalElement()
+    def _compileTerm(self):
+        self._openNonTerminalElement(NON_TERMINAL_TERM, eraseToken=False)
 
-        if self._eatExpected([T_SYMBOL], ['.']):
+        requiredTypes = [T_INTEGER_CONSTANT, T_STRING_CONSTANT, T_KEYWORD, T_IDENTIFIER, T_SYMBOL]
+        requiredValues = [K_TRUE, K_FALSE, K_NULL, K_THIS, '(', '-', '~']
+        self._eatObligatory(requiredTypes, requiredValues)
+
+        if self._currentToken['type'] in [T_INTEGER_CONSTANT, T_STRING_CONSTANT, T_KEYWORD]:
             self._writeTerminalElement()
 
-            self._eatObligatory([T_IDENTIFIER])
+        elif self._currentToken['type'] == T_SYMBOL:
+            symbol = self._currentToken['value']
             self._writeTerminalElement()
 
-        self._eatObligatory([T_SYMBOL], ['('])
-        self._writeTerminalElement()
-        
-        self._compileExpressionList()
+            if symbol == '(':
+                self._compileExpression()
 
-        self._eatObligatory([T_SYMBOL], [')'])
-        self._writeTerminalElement()
+                self._eatObligatory([T_SYMBOL], [')'])
+                self._writeTerminalElement()
+            else:
+                self._compileTerm()
+
+        elif self._currentToken['type'] == T_IDENTIFIER:
+            self._writeTerminalElement()
+
+            if self._eatExpected([T_SYMBOL], ['[', '.', '(']):
+                symbol = self._currentToken['value']
+                
+                if symbol == '[':
+                    self._writeTerminalElement()
+
+                    self._compileExpression()
+
+                    self._eatObligatory([T_SYMBOL], [']'])
+                    self._writeTerminalElement()
+                else:
+                    self._compileSubroutineCall()
+
+        self._closeNonTerminalElement(NON_TERMINAL_TERM)
 
     def _compileExpressionList(self):
         self._openNonTerminalElement(NON_TERMINAL_EXPRESSION_LIST)
-        if self._eatExpected([T_IDENTIFIER, T_KEYWORD], [K_TRUE, K_FALSE, K_THIS, K_NULL]):
+
+        if not self._eatExpected([T_SYMBOL], [')']):
             self._compileExpression()
 
-            while self. _eatExpected([T_SYMBOL], [',']):
+            while self._eatExpected([T_SYMBOL], [',']):
                 self._writeTerminalElement()
 
                 self._compileExpression()
-        
+
         self._closeNonTerminalElement(NON_TERMINAL_EXPRESSION_LIST)
 
     #aux compile functions
@@ -223,10 +260,13 @@ class CompilationEngine:
             K_DO: self._compileDoStatement,
             K_RETURN : self._compileReturnStatement
         }
+
         keyword = self._currentToken['value']
         self._openNonTerminalElement(keyword + NON_TERMINAL_STATEMENT, eraseToken=False)
         self._writeTerminalElement()
+        
         COMPILE_FUNCTION_BY_KEYWORD[keyword]()
+
         self._closeNonTerminalElement(keyword + NON_TERMINAL_STATEMENT)
         
     def _compileConditionalStatementBody(self):
@@ -244,6 +284,25 @@ class CompilationEngine:
         self._compileStatements()
         
         self._eatObligatory([T_SYMBOL], ['}'])
+        self._writeTerminalElement()
+
+    def _compileSubroutineCall(self, calledFromDoStatement=False):
+        if calledFromDoStatement:
+            self._eatObligatory([T_IDENTIFIER])
+            self._writeTerminalElement()
+        
+        if self._eatExpected([T_SYMBOL], ['.']):
+            self._writeTerminalElement()
+
+            self._eatObligatory([T_IDENTIFIER])
+            self._writeTerminalElement()
+
+        self._eatObligatory([T_SYMBOL], ['('])
+        self._writeTerminalElement()
+
+        self._compileExpressionList()
+
+        self._eatObligatory([T_SYMBOL], [')'])
         self._writeTerminalElement()
 
     #aux functions
@@ -280,7 +339,15 @@ class CompilationEngine:
             self._openedNonTerminalElements.remove(element)
 
     def _writeTerminalElement(self):
+        XML_TRANSLATOR = {
+            '<': '&lt;',
+            '>': '&gt;',
+            '&': '&amp;',
+            '"': '&quot;'
+        }
+
         tokenType, tokenValue = self._currentToken.values()
+        tokenValue = XML_TRANSLATOR[tokenValue] if tokenValue in XML_TRANSLATOR else tokenValue.replace('"', '')
         self._outputFile.write(f'<{TERMINAL_ELEMENT_BY_TOKEN_TYPE[tokenType]}>')
         self._outputFile.write(f' {tokenValue} ')
         self._outputFile.write(f'</{TERMINAL_ELEMENT_BY_TOKEN_TYPE[tokenType]}>\n')
