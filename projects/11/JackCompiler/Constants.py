@@ -69,6 +69,18 @@ SEGMENT_THIS = 'this'
 SEGMENT_ARG = 'argument'
 SEGMENT_LOCAL = 'local'
 SEGMENT_THAT = 'that'
-SEGMENT_CONST = 'const'
+SEGMENT_CONST = 'constant'
 SEGMENT_TEMP = 'temp'
 SEGMENT_POINTER = 'pointer'
+
+VM_COMMAND_BY_JACK_OPERATOR = {
+    '+': 'add', 
+    '-': 'sub',
+    '*': 'call Math.multiply 2',
+    '/': 'call Math.divide 2',
+    '&': 'and',
+    '|': 'or',
+    '<': 'lt',
+    '>': 'gt',
+    '=': 'eq',
+}

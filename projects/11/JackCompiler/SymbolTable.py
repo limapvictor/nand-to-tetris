@@ -13,7 +13,8 @@ class SymbolTable:
         self._varCountByKind = {VAR_STATIC: 0, VAR_FIELD: 0, VAR_ARG: 0, VAR_LOCAL: 0}
 
     def getByName(self, name):
-        return [var for var in self._table if var['name'] == name][0]
+        entry = [var for var in self._table if var['name'] == name]
+        return entry[0] if len(entry) > 0 else None
 
     def insert(self, name, varType, kind):
         newEntry = {
@@ -25,3 +26,6 @@ class SymbolTable:
         } 
         self._table.append(newEntry)
         self._varCountByKind[kind] = self._varCountByKind[kind] + 1
+
+    def getVarCountByKind(self, kind):
+        return self._varCountByKind[kind]
