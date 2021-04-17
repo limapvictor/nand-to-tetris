@@ -3,7 +3,7 @@ import re
 from Constants import *
 
 class JackTokenizer:
-    KEYWORD_REGEX = '|'.join(KEYWORDS)
+    KEYWORD_REGEX = '|'.join([k+r'(?=\s)' for k in KEYWORDS])
     SYMBOL_REGEX = '[' + re.escape(''.join(SYMBOLS)) + ']'
     INT_REGEX = r'[0-9]{1,5}'
     STRING_REGEX = r'"[^"\n]*"'
@@ -51,7 +51,7 @@ class JackTokenizer:
         self._jackCode = tokenFinder.findall(self._jackCode)
 
     def _getTokenTypeByValue(self, value):
-        if re.fullmatch(self.KEYWORD_REGEX, value):
+        if value in KEYWORDS:
             return T_KEYWORD
 
         if re.fullmatch(self.SYMBOL_REGEX, value):
