@@ -85,6 +85,8 @@ class CompilationEngine:
         self._writer.writeFunction(funcName, nLocalVars)
 
         self._numberConditionalsStatementsCurrentFunction = 0
+        if self._currentCompilingFunction['kind'] == K_CONSTRUCTOR: self._compileConstructorCode()
+        elif self._currentCompilingFunction['kind'] == K_METHOD: self._compileMethodCode()
         self._compileStatements()
         self._eatObligatory([T_SYMBOL], ['}'])
         return
@@ -93,12 +95,10 @@ class CompilationEngine:
         while self._eatExpected([T_KEYWORD], [K_VAR]):
             varType, name = self._compileTypedVarDeclaration()
             self._subroutineVariables.insert(name, varType, VAR_LOCAL)
-
             while self._eatExpected([T_SYMBOL], [',']):
                 self._eatObligatory([T_IDENTIFIER])
                 name = self._currentToken['value']
                 self._subroutineVariables.insert(name, varType, VAR_LOCAL)
-
             self._eatObligatory([T_SYMBOL], [';'])
         return
 
@@ -113,13 +113,20 @@ class CompilationEngine:
         name = self._currentToken['value']
         segment, index = self._searchVariableByName(name)
         
+        isArrayAssignment = False
         if self._eatExpected([T_SYMBOL], ['[']):
-            self._compileExpression()
-            self._eatObligatory([T_SYMBOL], [']'])
+            self._compileArrayPosition(name)
+            isArrayAssignment = True
 
         self._eatObligatory([T_SYMBOL], ['='])
         self._compileExpression()
-        self._writer.writePop(segment, index)
+        if isArrayAssignment:
+            self._writer.writePop(SEGMENT_TEMP, 0)
+            self._writer.writePop(SEGMENT_POINTER, 1)
+            self._writer.writePush(SEGMENT_TEMP, 0)
+            self._writer.writePop(SEGMENT_THAT, 0)
+        else:
+            self._writer.writePop(segment, index)
         self._eatObligatory([T_SYMBOL], [';'])
         return
 
@@ -189,6 +196,7 @@ class CompilationEngine:
             operator = self._currentToken['value']
             self._compileTerm()
             self._writer.writeArithmetic(VM_COMMAND_BY_JACK_OPERATOR[operator])
+        return
 
     def _compileTerm(self):
         requiredTypes = [T_INTEGER_CONSTANT, T_STRING_CONSTANT, T_KEYWORD, T_IDENTIFIER, T_SYMBOL]
@@ -201,7 +209,12 @@ class CompilationEngine:
             self._writer.writePush(SEGMENT_CONST, integer)
 
         elif tokenType == T_STRING_CONSTANT:
-            pass
+            stringConst = self._currentToken['value'].replace('"', '')
+            self._writer.writePush(SEGMENT_CONST, len(stringConst))
+            self._writer.writeCall('String.new', 1)
+            for char in stringConst:
+                self._writer.writePush(SEGMENT_CONST, ord(char))
+                self._writer.writeCall('String.appendChar', 2)
         
         elif tokenType == T_KEYWORD:
             constant = self._currentToken['value']
@@ -211,7 +224,7 @@ class CompilationEngine:
                 self._writer.writePush(SEGMENT_CONST, 1)
                 self._writer.writeArithmetic('neg')
             else:
-                self._write.writePush(SEGMENT_POINTER, 0)
+                self._writer.writePush(SEGMENT_POINTER, 0)
 
         elif tokenType == T_SYMBOL:
             symbol = self._currentToken['value']
@@ -226,13 +239,14 @@ class CompilationEngine:
         elif tokenType == T_IDENTIFIER:
             name = self._currentToken['value']
             if self._eatExpected([T_SYMBOL], ['[', '.', '(']):
-                self._preserveCurrentToken = True
                 symbol = self._currentToken['value']
 
                 if symbol == '[':
-                    self._compileExpression()
-                    self._eatObligatory([T_SYMBOL], [']'])
+                    self._compileArrayPosition(name)
+                    self._writer.writePop(SEGMENT_POINTER, 1)
+                    self._writer.writePush(SEGMENT_THAT, 0)
                 else:
+                    self._preserveCurrentToken = True
                     self._compileSubroutineCall(name)
             else:
                 segment, index = self._searchVariableByName(name)
@@ -247,6 +261,7 @@ class CompilationEngine:
             while self._eatExpected([T_SYMBOL], [',']):
                 self._compileExpression()
                 nArgs += 1
+        self._preserveCurrentToken = True
         return nArgs
 
     #aux compile functions
@@ -275,14 +290,47 @@ class CompilationEngine:
             self._eatObligatory([T_IDENTIFIER])
             name = self._currentToken['value']
         
+        nArgs = 0
         if self._eatExpected([T_SYMBOL], ['.']):
             self._eatObligatory([T_IDENTIFIER])
-            name = f'{name}.{self._currentToken["value"]}'
-
+            funcName = self._currentToken["value"]
+            varInfo = self._searchVariableByName(name)
+            if varInfo is not None:
+                segment, index = varInfo
+                self._writer.writePush(segment, index)
+                nArgs += 1
+            else: 
+                funcName = f'{name}.{funcName}'
+        else:
+            funcName = name
+                
         self._eatObligatory([T_SYMBOL], ['('])
-        nArgs = self._compileExpressionList()
+        nArgs += self._compileExpressionList()
         self._eatObligatory([T_SYMBOL], [')'])
-        self._writer.writeCall(name, nArgs)
+        self._writer.writeCall(funcName, nArgs)
+        return
+
+    def _compileConstructorCode(self):
+        nArgs = self._subroutineVariables.getVarCountByKind(VAR_ARG)
+        self._writer.writePush(SEGMENT_CONST, nArgs)
+        self._writer.writeCall('Memory.alloc', 1)
+        self._writer.writePop(SEGMENT_POINTER, 0)
+        return
+
+    def _compileMethodCode(self):
+        self._writer.writePush(SEGMENT_ARG, 0)
+        self._writer.writePop(SEGMENT_POINTER, 0)
+        return
+
+    def _compileArrayPosition(self, arrName):
+        arrayBaseAddr = self._searchVariableByName(arrName)
+        segment, index = arrayBaseAddr
+
+        self._writer.writePush(segment, index)
+        self._compileExpression()
+        self._writer.writeArithmetic('add')
+
+        self._eatObligatory([T_SYMBOL], [']'])
         return
 
     #aux functions
@@ -297,9 +345,11 @@ class CompilationEngine:
             self._currentToken = self._tokenizer.advance()
         
         if (self._currentToken['type'] not in requiredTokenTypes or 
-                (self._currentToken['type'] in TOKEN_TYPES_WITH_EXPECTABLE_VALUES and 
-                len(requiredTokenValues) > 0 and self._currentToken['value'] not in requiredTokenValues)):
-                self._writer.writeCompilationError('SYNTAX ERROR!')
+            (self._currentToken['type'] in TOKEN_TYPES_WITH_EXPECTABLE_VALUES and 
+            len(requiredTokenValues) > 0 and self._currentToken['value'] not in requiredTokenValues)):
+                self._writer.writeCompilationError(f'SYNTAX ERROR!')
+                self._writer.writeCompilationError(f'TOKEN GIVEN: {self._currentToken}')
+                self._writer.writeCompilationError(f'EXPECTED: {requiredTokenValues} in {requiredTokenTypes}')
                 exit(1)
         return
 
@@ -316,5 +366,6 @@ class CompilationEngine:
         if subroutineVar is not None:
             return subroutineVar['segment'], subroutineVar['index']
         classVar = self._classVariables.getByName(name)
-        return classVar['segment'], classVar['index'] if classVar is not None else None
-         
+        if classVar is not None:
+            return classVar['segment'], classVar['index']
+        return None 
