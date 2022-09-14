@@ -133,4 +133,8 @@ class Math {
     function boolean bit(int x, int i) {
         return ~((x & twoToThe[i]) = 0);
     }
+
+    function int powerOfTwo(int power) {
+        return twoToThe[power];
+    }
 }
