@@ -10,25 +10,106 @@
  */ 
 class Memory {
 
+    static Array RAM;
+    static Array heap;
+    static Array freeList;
+    static int NEXT_FREE_BLOCK_ADDRESS_INDEX, BLOCK_SIZE_INDEX, OBJECT_ALLOCATED_SIZE_RELATIVE_INDEX;
+    
     /** Initializes the class. */
     function void init() {
+        let NEXT_FREE_BLOCK_ADDRESS_INDEX = 0;
+        let BLOCK_SIZE_INDEX = 1;
+        let OBJECT_ALLOCATED_SIZE_RELATIVE_INDEX = -1;
+        
+        let RAM = 0;
+        let heap = 2048;
+        let freeList = heap;
+        let freeList[NEXT_FREE_BLOCK_ADDRESS_INDEX] = null;
+        let freeList[BLOCK_SIZE_INDEX] = 14335;
+        return;
     }
 
     /** Returns the RAM value at the given address. */
     function int peek(int address) {
+        if ((address < 0) | (address > 24576)) {
+            do Output.printString("Invalid address");
+            return null;
+        }
+        return RAM[address];
     }
 
     /** Sets the RAM value at the given address to the given value. */
     function void poke(int address, int value) {
+        if ((address < 0) | (address > 24576)) {
+            do Output.printString("Invalid address");
+            return;
+        }
+        let RAM[address] = value;
+        return;
     }
 
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
     function int alloc(int size) {
+        var Array freeListFoundBlock, foundBlock;
+        var int freeListFoundBlockUpdatedSize;
+
+        let freeListFoundBlock = Memory.firstFit(size);
+        if (freeListFoundBlock = null) {
+            do Output.printString("Block of required size not available");
+            return null;
+        }
+
+        let freeListFoundBlockUpdatedSize = freeListFoundBlock[BLOCK_SIZE_INDEX] - (size + 2);
+        let foundBlock = (freeListFoundBlock + 2) + freeListFoundBlockUpdatedSize;
+        let foundBlock[NEXT_FREE_BLOCK_ADDRESS_INDEX] = null;
+        let foundBlock[BLOCK_SIZE_INDEX] = size;
+        let freeListFoundBlock[BLOCK_SIZE_INDEX] = freeListFoundBlockUpdatedSize;
+        return foundBlock + 2;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
+        var Array currentFreeBlock;
+
+        let currentFreeBlock = freeList;
+        while (~(currentFreeBlock[NEXT_FREE_BLOCK_ADDRESS_INDEX])) {
+            let currentFreeBlock = currentFreeBlock[NEXT_FREE_BLOCK_ADDRESS_INDEX];
+        }
+        let currentFreeBlock[NEXT_FREE_BLOCK_ADDRESS_INDEX] = o - 2;
+        return;
+    }
+
+    function int firstFit(int size) {
+        var Array currentFreeBlock;
+
+        let currentFreeBlock = freeList;
+        while (~(currentFreeBlock = null)) {
+            if (~(currentFreeBlock[BLOCK_SIZE_INDEX] < (size + 2))) {
+                return currentFreeBlock;
+            }
+            let currentFreeBlock = currentFreeBlock[NEXT_FREE_BLOCK_ADDRESS_INDEX];
+        }
+
+        return null;
+    }
+
+    function int bestFit(int size) {
+        var Array currentFreeBlock, bestFreeBlock;
+
+        let bestFreeBlock = freeList;
+        let currentFreeBlock = freeList[NEXT_FREE_BLOCK_ADDRESS_INDEX];
+        while (~(currentFreeBlock = null)) {
+            if (~(currentFreeBlock[BLOCK_SIZE_INDEX] < size + 2) & (currentFreeBlock[BLOCK_SIZE_INDEX] < bestFreeBlock[BLOCK_SIZE_INDEX])) {
+                let bestFreeBlock = currentFreeBlock;
+            }
+            let currentFreeBlock = currentFreeBlock[NEXT_FREE_BLOCK_ADDRESS_INDEX];
+        }
+
+        if (bestFreeBlock[BLOCK_SIZE_INDEX] < size + 2) {
+            return null;
+        }
+        return bestFreeBlock;
     }    
 }
